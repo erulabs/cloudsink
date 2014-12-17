@@ -7,6 +7,7 @@ var cli = require('commander');
 var RacksJS = require('racksjs');
 var md5 = require('MD5');
 var fs = require('fs');
+var _ = require('highland');
 
 cli
   .option('-s, --source <dir>', 'Source directory')
@@ -16,6 +17,7 @@ cli
   .option('-f, --filter <filterString>', 'File filter - example: "*.jpg"')
   .option('-r, --region <region>', 'Rackspace Region - example: IAD, ORD')
   .option('-S, --serviceNet', 'Use Rackspace ServiceNet for transfer')
+  .option('-R, --rate', 'Number of uploads per second, defaults to 5')
   .parse(process.argv);
 
 if (!cli.username || !cli.apikey) {
@@ -33,6 +35,9 @@ if (!cli.source) {
 if (!cli.region) {
   console.log('You did not provide a region! Use -r');
   process.exit();
+}
+if (!cli.rate) {
+  cli.rate = 5;
 }
 
 new RacksJS({
@@ -52,8 +57,11 @@ new RacksJS({
   var container = rs.cloudFiles.containers.assume(cli.target);
 
   container.listObjects(function (existingObjects) {
-    readdirp({ root: path.join(cli.source), fileFilter: cli.filter })
-      .on('warn', function (err) {
+    var stream = readdirp({ root: path.join(cli.source), fileFilter: cli.filter });
+
+    _(stream).ratelimit(cli.rate, 1000);
+
+    stream.on('warn', function (err) {
         console.error('something went wrong when processing an entry', err);
       })
       .on('error', function (err) {
