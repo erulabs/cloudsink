@@ -5,7 +5,8 @@
 var readdirp = require('readdirp');
 var path = require('path');
 var cli = require('commander');
-var RacksJS = require('racksjs');
+//var RacksJS = require('racksjs');
+var RacksJS = require('/Users/sean6011/projects/racksjs/dist/racks.js');
 var md5 = require('MD5');
 var fs = require('fs');
 var ratelimit = require('rate-limit');
@@ -86,9 +87,7 @@ new RacksJS({
           console.log(file, 'Upload response code:', response.statusCode);
         } else {
           console.log('Upload complete %s', file);
-          if (UploadQueue.length === 0) {
-            console.log('Directory synched!');
-          } else {
+          if (UploadQueue.length !== 0) {
             upload();
           }
         }
@@ -105,27 +104,27 @@ new RacksJS({
     } else {
       remoteFileName = cli.source + path.sep + entry.path;
     }
-    if (existingObjects.indexOf(remoteFileName) === -1) {
-      UploadQueue.push(remoteFileName);
-      if (!uploadStarted) {
-        upload();
-      }
-    } else {
+    if (existingObjects.indexOf(remoteFileName) > -1) {
       QuickQueue.add(function () {
         rs.get(container._racksmeta.target() + '/' + remoteFileName, function (data, response) {
           var remoteMD5 = response.headers.etag;
           fs.readFile(remoteFileName, function(err, buf) {
-            if (remoteMD5 !== md5(buf)) {
+            var localMD5 = md5(buf);
+            if (remoteMD5 !== localMD5) {
+              console.log('Updating', remoteFileName, 'remote MD5', remoteMD5);
               UploadQueue.push(remoteFileName);
               if (!uploadStarted) {
                 upload();
               }
-            } else {
-              // console.log('file synced');
             }
           });
         });
       });
+    } else {
+      UploadQueue.push(remoteFileName);
+      if (!uploadStarted) {
+        upload();
+      }
     }
   }
 });
