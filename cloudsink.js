@@ -6,6 +6,7 @@ var readdirp = require('readdirp');
 var path = require('path');
 var cli = require('commander');
 var RacksJS = require('racksjs');
+var RacksJS = require('/Users/sean6011/projects/racksjs/dist/racks.js');
 var md5 = require('MD5');
 var fs = require('fs');
 var ratelimit = require('rate-limit');
@@ -102,9 +103,10 @@ new RacksJS({
     } else {
       remoteFileName = cli.source + path.sep + entry.path;
     }
+    // If remote file exists
     if (existingObjects.indexOf(remoteFileName) > -1) {
       QuickQueue.add(function () {
-        rs.get(container._racksmeta.target() + '/' + remoteFileName, function (data, response) {
+        rs.get(container._racksmeta.target() + '/' + encodeURIComponent(remoteFileName), function (data, response) {
           var remoteMD5 = response.headers.etag;
           fs.readFile(remoteFileName, function(err, buf) {
             var localMD5 = md5(buf);
