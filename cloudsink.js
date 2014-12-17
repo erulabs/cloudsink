@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/bin/sh
+//bin/false || `which node || which nodejs` << `tail -n +2 $0`
 'use strict';
 
 var readdirp = require('readdirp');
