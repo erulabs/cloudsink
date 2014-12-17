@@ -62,7 +62,6 @@ new RacksJS({
   container = rs.cloudFiles.containers.assume(cli.target);
 
   container.listObjects(function (existingObjects) {
-    console.log('complete list', existingObjects);
     readdirp({ root: path.join(cli.source), fileFilter: cli.filter })
       .on('warn', function (err) {
         console.error('something went wrong when processing an entry', err);
