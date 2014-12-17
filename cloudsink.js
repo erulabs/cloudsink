@@ -1,5 +1,5 @@
 #!/bin/sh
-//bin/false || `which node || which nodejs` << `tail -n +2 $0`
+':' //; exec "$(command -v nodejs || command -v node)" "$0" "$@"
 'use strict';
 
 var readdirp = require('readdirp');
