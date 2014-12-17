@@ -18,7 +18,6 @@ cli
   .option('-f, --filter <filterString>', 'File filter - example: "*.jpg"')
   .option('-r, --region <region>', 'Rackspace Region - example: IAD, ORD')
   .option('-S, --serviceNet', 'Use Rackspace ServiceNet for transfer')
-  .option('-R, --rate <rate>', 'Number milliseconds between starting new uploads. Defaults to 1 second')
   .parse(process.argv);
 
 if (!cli.username || !cli.apikey) {
@@ -37,21 +36,21 @@ if (!cli.region) {
   console.log('You did not provide a region! Use -r');
   process.exit();
 }
-if (cli.rate) {
-  cli.rate = parseInt(cli.rate);
-} else {
-  cli.rate = 1000;
-}
 
-var Queue = ratelimit.createQueue({ interval: cli.rate });
+// Use a queue for GETs to prevent hitting API rate limits
+// Since we're uploading one at a time, it's not a big deal if this is a bit slow.
+// as most of the time this will be building out the UploadQueue well ahead of the upload() function
+var QuickQueue = ratelimit.createQueue({ interval: 500 });
 var container = false;
+
+var UploadQueue = [];
 
 new RacksJS({
   username: cli.username,
   apiKey: cli.apikey,
   verbosity: 0
 }, function (rs) {
-
+  var uploadStarted = false;
   rs.datacenter = cli.region;
   if (cli.serviceNet) {
     rs.network = 'internal';
@@ -71,12 +70,34 @@ new RacksJS({
         console.error('something went fatally wrong and the stream was aborted', err);
       })
       .on('data', function (entry) {
-        Queue.add(function () {
-          syncFile(entry, existingObjects);
-        });
+        syncFile(entry, existingObjects);
       });
   });
 
+  function upload () {
+    uploadStarted = true;
+    var file = UploadQueue.shift();
+    if (file) {
+      console.log('Uploading %s', file);
+      var request = container.upload({
+        file: file
+      }, function (response) {
+        if (response.statusCode !== 201) {
+          console.log(file, 'Upload response code:', response.statusCode);
+        } else {
+          console.log('Upload complete %s', file);
+          if (UploadQueue.length === 0) {
+            console.log('Directory synched!');
+          } else {
+            upload();
+          }
+        }
+      });
+      request.on('error', function (err) {
+        console.log('Connection error:', err);
+      });
+    }
+  }
   function syncFile (entry, existingObjects) {
     var remoteFileName;
     if (cli.source === '.') {
@@ -85,22 +106,24 @@ new RacksJS({
       remoteFileName = cli.source + path.sep + entry.path;
     }
     if (existingObjects.indexOf(remoteFileName) === -1) {
-      console.log('uploading %s...', remoteFileName);
-      container.upload({
-        file: remoteFileName
-      });
+      UploadQueue.push(remoteFileName);
+      if (!uploadStarted) {
+        upload();
+      }
     } else {
-      rs.get(container._racksmeta.target() + '/' + remoteFileName, function (data, response) {
-        var remoteMD5 = response.headers.etag;
-        fs.readFile(remoteFileName, function(err, buf) {
-          if (remoteMD5 === md5(buf)) {
-            console.log('%s already exists remotely', remoteFileName);
-          } else {
-            console.log('MD5 mismatch - uploading %s', remoteFileName);
-            container.upload({
-              file: remoteFileName
-            });
-          }
+      QuickQueue.add(function () {
+        rs.get(container._racksmeta.target() + '/' + remoteFileName, function (data, response) {
+          var remoteMD5 = response.headers.etag;
+          fs.readFile(remoteFileName, function(err, buf) {
+            if (remoteMD5 !== md5(buf)) {
+              UploadQueue.push(remoteFileName);
+              if (!uploadStarted) {
+                upload();
+              }
+            } else {
+              // console.log('file synced');
+            }
+          });
         });
       });
     }
