@@ -78,14 +78,13 @@ new RacksJS({
     uploadStarted = true;
     var file = UploadQueue.shift();
     if (file) {
-      console.log('Uploading %s', file);
       var request = container.upload({
         file: file
       }, function (response) {
         if (response.statusCode !== 201) {
           console.log(file, 'Upload response code:', response.statusCode);
         } else {
-          console.log('Upload complete %s', file);
+          console.log('%s complete', file);
           if (UploadQueue.length !== 0) {
             upload();
           }
@@ -110,7 +109,6 @@ new RacksJS({
           fs.readFile(remoteFileName, function(err, buf) {
             var localMD5 = md5(buf);
             if (remoteMD5 !== localMD5) {
-              console.log('Updating', remoteFileName, 'remote MD5', remoteMD5);
               UploadQueue.push(remoteFileName);
               if (!uploadStarted) {
                 upload();
