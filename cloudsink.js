@@ -7,7 +7,7 @@ var cli = require('commander');
 var RacksJS = require('racksjs');
 var md5 = require('MD5');
 var fs = require('fs');
-var _ = require('highland');
+var ratelimit = require('rate-limit');
 
 cli
   .option('-s, --source <dir>', 'Source directory')
@@ -17,7 +17,7 @@ cli
   .option('-f, --filter <filterString>', 'File filter - example: "*.jpg"')
   .option('-r, --region <region>', 'Rackspace Region - example: IAD, ORD')
   .option('-S, --serviceNet', 'Use Rackspace ServiceNet for transfer')
-  .option('-R, --rate', 'Number of uploads per second, defaults to 5')
+  .option('-R, --rate <rate>', 'Number milliseconds between starting new uploads. Defaults to 1 second')
   .parse(process.argv);
 
 if (!cli.username || !cli.apikey) {
@@ -37,8 +37,11 @@ if (!cli.region) {
   process.exit();
 }
 if (!cli.rate) {
-  cli.rate = 5;
+  cli.rate = 1000;
 }
+
+var Queue = ratelimit.createQueue({ interval: cli.rate });
+var container = false;
 
 new RacksJS({
   username: cli.username,
@@ -54,50 +57,49 @@ new RacksJS({
   }
 
   // TODO: Verify container (option to create)
-  var container = rs.cloudFiles.containers.assume(cli.target);
+  container = rs.cloudFiles.containers.assume(cli.target);
 
   container.listObjects(function (existingObjects) {
-    var stream = readdirp({ root: path.join(cli.source), fileFilter: cli.filter });
-
-    _(stream).ratelimit(cli.rate, 1000);
-
-    stream.on('warn', function (err) {
+    readdirp({ root: path.join(cli.source), fileFilter: cli.filter })
+      .on('warn', function (err) {
         console.error('something went wrong when processing an entry', err);
       })
       .on('error', function (err) {
         console.error('something went fatally wrong and the stream was aborted', err);
       })
       .on('data', function (entry) {
-        var remoteFileName;
-        if (cli.source === '.') {
-          remoteFileName = entry.path;
-        } else {
-          remoteFileName = cli.source + path.sep + entry.path;
-        }
-        if (existingObjects.indexOf(remoteFileName) === -1) {
-          console.log('uploading %s...', remoteFileName);
-          container.upload({
-            file: remoteFileName
-          }, function (reply) {
-            console.log(reply.statusCode);
-          });
-        } else {
-          rs.get(container._racksmeta.target() + '/' + remoteFileName, function (data, response) {
-            var remoteMD5 = response.headers.etag;
-            fs.readFile(remoteFileName, function(err, buf) {
-              if (remoteMD5 === md5(buf)) {
-                console.log('%s already exists remotely', remoteFileName);
-              } else {
-                console.log('MD5 mismatch - uploading local file');
-                container.upload({
-                  file: remoteFileName
-                }, function (reply) {
-                  console.log(reply.statusCode);
-                });
-              }
-            });
-          });
-        }
+        Queue.add(function () {
+          syncFile(entry, existingObjects);
+        });
       });
   });
+
+  function syncFile (entry, existingObjects) {
+    var remoteFileName;
+    if (cli.source === '.') {
+      remoteFileName = entry.path;
+    } else {
+      remoteFileName = cli.source + path.sep + entry.path;
+    }
+    if (existingObjects.indexOf(remoteFileName) === -1) {
+      console.log('uploading %s...', remoteFileName);
+      container.upload({
+        file: remoteFileName
+      });
+    } else {
+      rs.get(container._racksmeta.target() + '/' + remoteFileName, function (data, response) {
+        var remoteMD5 = response.headers.etag;
+        fs.readFile(remoteFileName, function(err, buf) {
+          if (remoteMD5 === md5(buf)) {
+            console.log('%s already exists remotely', remoteFileName);
+          } else {
+            console.log('MD5 mismatch - uploading %s', remoteFileName);
+            container.upload({
+              file: remoteFileName
+            });
+          }
+        });
+      });
+    }
+  }
 });
