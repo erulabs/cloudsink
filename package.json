@@ -1,8 +1,8 @@
 {
   "name": "cloudsink",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A Rackspace CloudFiles utility for syncing entire and massive directories",
-  "bin": "cloudsink.js",
+  "bin": "./cloudsink.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
