@@ -37,7 +37,9 @@ if (!cli.region) {
   console.log('You did not provide a region! Use -r');
   process.exit();
 }
-if (!cli.rate) {
+if (cli.rate) {
+  cli.rate = parseInt(cli.rate);
+} else {
   cli.rate = 1000;
 }
 
