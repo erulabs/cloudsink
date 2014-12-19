@@ -37,10 +37,10 @@ if (!cli.region) {
   process.exit();
 }
 
-// Use a queue for GETs to prevent hitting API rate limits
-// Since we're uploading one at a time, it's not a big deal if this is a bit slow.
-// as most of the time this will be building out the UploadQueue well ahead of the upload() function
-var GetQueue = ratelimit.createQueue({ interval: 500 });
+// The rate limit for GETs on the Rackspace API is 1000 per min, or one per 16.6ms
+// we'll stay well ahead of that limit.
+var GetRate = 25;
+var GetQueue = ratelimit.createQueue({ interval: GetRate });
 var container = false;
 var UploadQueue = [];
 var filesVerified = 0;
@@ -65,8 +65,11 @@ new RacksJS({
   container = rs.cloudFiles.containers.assume(cli.target);
 
   var readingDir = true;
-  console.log('Downloading list of remote objects...');
+  process.stdout.write('Downloading list of remote objects...');
   container.listAllObjects(function (existingObjects) {
+    console.log('Found %s objects remotely.', existingObjects.length);
+    var aproxMaxTime = ((GetRate * existingObjects.length)/60/60);
+    console.log('At %sms between GETs, the next step will take at most %s minutes', GetRate, Math.round(aproxMaxTime));
     console.log('Enumerating local directory & Compairing MD5 sums...');
     readdirp({ root: path.join(cli.source), fileFilter: cli.filter })
       .on('warn', function (err) {
