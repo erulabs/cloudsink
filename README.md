@@ -20,6 +20,7 @@ Check the help: ```cloudsink --help```
 Options to know about:
 
   - ```-S``` for ServiceNet
+  - ```-f``` for filter - ex: ```-f "*.jpg"```
 
 TODOS:
 
