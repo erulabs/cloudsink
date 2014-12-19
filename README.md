@@ -19,6 +19,7 @@ Check the help: ```cloudsink --help```
 
 Options to know about:
 
+  - ```-F``` for fastmode - don't check MD5 sums of files, just validate existence by name
   - ```-S``` for ServiceNet
   - ```-f``` for filter - ex: ```-f "*.jpg"```
 

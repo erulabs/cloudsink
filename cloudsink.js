@@ -18,6 +18,7 @@ cli
   .option('-f, --filter <filterString>', 'File filter - example: "*.jpg"')
   .option('-r, --region <region>', 'Rackspace Region - example: IAD, ORD')
   .option('-S, --serviceNet', 'Use Rackspace ServiceNet for transfer')
+  .option('-F, --skipMd5Check', 'Dont check MD5 sums - just upload missing files')
   .parse(process.argv);
 
 if (!cli.username || !cli.apikey) {
@@ -35,6 +36,10 @@ if (!cli.source) {
 if (!cli.region) {
   console.log('You did not provide a region! Use -r');
   process.exit();
+}
+var checkMd5Sums = true;
+if (cli.skipMd5Check) {
+  checkMd5Sums = false;
 }
 
 // The rate limit for GETs on the Rackspace API is 1000 per min, or one per 16.6ms
@@ -69,8 +74,12 @@ new RacksJS({
   container.listAllObjects(function (existingObjects) {
     console.log('Found %s objects remotely.', existingObjects.length);
     var aproxMaxTime = ((GetRate * existingObjects.length)/60/60);
-    console.log('At %sms between GETs, the next step will take at most %s minutes', GetRate, Math.round(aproxMaxTime));
-    console.log('Enumerating local directory & Compairing MD5 sums...');
+    if (checkMd5Sums) {
+      console.log('At %sms between GETs, the next step will take at most %s minutes', GetRate, Math.round(aproxMaxTime));
+      console.log('Enumerating local directory & Compairing MD5 sums...');
+    } else {
+      console.log('Enumerating local directory');
+    }
     readdirp({ root: path.join(cli.source), fileFilter: cli.filter })
       .on('warn', function (err) {
         console.error('something went wrong when processing an entry', err);
@@ -83,6 +92,8 @@ new RacksJS({
       })
       .on('end', function () {
         readingDir = false;
+        filesVerified--;
+        startUploadCheck();
       });
   });
 
@@ -136,19 +147,23 @@ new RacksJS({
     remoteFileName = localFileName.replace(path.sep, '/');
     // If remote file exists
     if (existingObjects.indexOf(remoteFileName) > -1) {
-      GetQueue.add(function () {
-        rs.get(container._racksmeta.target() + '/' + encodeURIComponent(remoteFileName), function (data, response) {
-          var remoteMD5 = response.headers.etag;
-          fs.readFile(remoteFileName, function(err, buf) {
-            var localMD5 = md5(buf);
-            if (remoteMD5 !== localMD5) {
-              modifiedFiles++;
-              UploadQueue.push(remoteFileName);
-            }
-            startUploadCheck();
+      if (checkMd5Sums) {
+        GetQueue.add(function () {
+          rs.get(container._racksmeta.target() + '/' + encodeURIComponent(remoteFileName), function (data, response) {
+            var remoteMD5 = response.headers.etag;
+            fs.readFile(remoteFileName, function(err, buf) {
+              var localMD5 = md5(buf);
+              if (remoteMD5 !== localMD5) {
+                modifiedFiles++;
+                UploadQueue.push(remoteFileName);
+              }
+              startUploadCheck();
+            });
           });
         });
-      });
+      } else {
+        startUploadCheck();
+      }
     } else {
       newFiles++;
       UploadQueue.push(remoteFileName);
