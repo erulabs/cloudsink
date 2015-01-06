@@ -42,6 +42,16 @@ if (cli.skipMd5Check) {
   checkMd5Sums = false;
 }
 
+// Allow an array of filters
+if (cli.filter) {
+  if (cli.filter.indexOf(',') !== -1) {
+    cli.filter = cli.filter.split(',');
+    for (var i in cli.filter) {
+      cli.filter[i] = cli.filter[i].trim()
+    }
+  }
+}
+
 // The rate limit for GETs on the Rackspace API is 1000 per min, or one per 16.6ms
 // we'll stay well ahead of that limit.
 var GetRate = 25;

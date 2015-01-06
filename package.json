@@ -1,6 +1,6 @@
 {
   "name": "cloudsink",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "A Rackspace CloudFiles utility for syncing entire and massive directories",
   "bin": "./cloudsink.js",
   "scripts": {
