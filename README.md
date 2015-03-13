@@ -3,6 +3,8 @@ CloudSink
 
 A Rackspace Cloud Files directory sync tool that isn't awful
 
+[![NPM](https://nodei.co/npm/cloudsink.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/cloudsink/)
+
 Install NodeJS and NPM:
 
 ```npm install -g cloudsink```
